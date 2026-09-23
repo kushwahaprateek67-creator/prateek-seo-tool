@@ -98,7 +98,7 @@ button[aria-selected="true"] {
 """, unsafe_allow_html=True)
 
 # ================= AUTH GATEWAY =================
-APP_PASSWORD = "mysecretpassword123"  # Prateek@2026
+APP_PASSWORD = "mysecretpassword123" Prateek@2026
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
