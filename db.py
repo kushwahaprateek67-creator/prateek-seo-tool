@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 DB_NAME = "data_v2.db"
 
 def get_ist_now():
-    # Indian Standard Time (UTC + 5:30) bina kisi external package ke
     ist_offset = timezone(timedelta(hours=5, minutes=30))
     return datetime.now(ist_offset)
 
@@ -25,11 +24,16 @@ def init_db():
     conn.commit()
     conn.close()
 
-def log_initial_email(recipient, subject, message_id="", delay_hours=24):
+def log_initial_email(recipient, subject, message_id="", due_time_or_hours=24):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     now_ist = get_ist_now()
-    due_ist = now_ist + timedelta(hours=delay_hours)
+    
+    # Handle if due_time is already a string timestamp or an integer/float hour
+    if isinstance(due_time_or_hours, (int, float)):
+        due_val = (now_ist + timedelta(hours=due_time_or_hours)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        due_val = str(due_time_or_hours)
     
     cursor.execute('''
         INSERT INTO campaigns (recipient, subject, sent_at, followup_due, status, message_id)
@@ -38,9 +42,9 @@ def log_initial_email(recipient, subject, message_id="", delay_hours=24):
         recipient,
         subject,
         now_ist.strftime("%Y-%m-%d %H:%M:%S"),
-        due_ist.strftime("%Y-%m-%d %H:%M:%S"),
+        due_val,
         'PENDING',
-        message_id
+        str(message_id)
     ))
     conn.commit()
     conn.close()
