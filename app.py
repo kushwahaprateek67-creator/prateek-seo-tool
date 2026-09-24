@@ -80,6 +80,7 @@ if not st.session_state.authenticated:
     st.stop()
 # ================================================
 
+# Ensure database and table exist
 db.init_db()
 
 st.markdown("# ⚡ Bulk Email Outreach Tool")
@@ -109,7 +110,7 @@ with tab1:
 
     if st.button("🚀 Send First Email >>", type="primary"):
         if not s_email or not s_pass or not email_list_input.strip():
-            st.error("❌ Details adhoori hain!")
+            st.error("❌ Details adhoori hain! Kripya Gmail, App Password aur Emails bharein.")
         else:
             raw_emails = email_list_input.split('\n')
             valid_emails = [m.strip() for m in raw_emails if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', m.strip())]
@@ -126,6 +127,8 @@ with tab1:
                         sender.send_day1_email(s_email, s_pass, recipient, subject, body_day1, delay_hours=24, sender_header=from_header)
                     except TypeError:
                         sender.send_day1_email(s_email, s_pass, recipient, subject, body_day1, delay_hours=24)
+                    except Exception as err:
+                        st.error(f"❌ Error: {recipient} -> {err}")
                     
                     progress_bar.progress((i + 1) / len(valid_emails))
                     if i < len(valid_emails) - 1:
@@ -135,23 +138,59 @@ with tab1:
 
 with tab2:
     st.markdown("### 📊 Email History aur Follow-up Status")
-    records = db.get_all_records()
+    
+    # Auto-repair DB check
+    conn = sqlite3.connect("emails.db")
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient TEXT,
+            subject TEXT,
+            sent_at TEXT,
+            followup_due TEXT,
+            status TEXT,
+            message_id TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+    try:
+        records = db.get_all_records()
+    except Exception:
+        records = []
+
     if records:
         df_records = pd.DataFrame(records, columns=["ID", "Receiver Email", "Subject", "Sent Time", "Follow-up Due Time", "Status"])
         st.dataframe(df_records, use_container_width=True)
     else:
-        st.info("Koi record nahi hai.")
+        st.info("Abhi tak koi email record nahi hai.")
 
     st.markdown("---")
-    st.write("Aap kisi bhi waqt pending emails ko follow-up bhej sakte hain (Bina time ka wait kiye).")
+    st.write("Aap kisi bhi waqt pending emails ko follow-up bhej sakte hain:")
     
     if st.button("⚡ Bhejo Pending Follow-ups (Jab Chaho Tab) >>", type="primary"):
         if not s_email or not s_pass:
-            st.error("❌ Pehle Tab 1 mein apna Gmail aur App Password dalein!")
+            st.error("❌ Pehle Tab 1 mein apna Gmail aur 16-Digit App Password dalein!")
         else:
-            # Bina time limit check kiye, seedha database se PENDING nikalna
             conn = sqlite3.connect("emails.db")
             cursor = conn.cursor()
+            
+            # Ensure table exists before executing SELECT
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS campaigns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient TEXT,
+                    subject TEXT,
+                    sent_at TEXT,
+                    followup_due TEXT,
+                    status TEXT,
+                    message_id TEXT
+                )
+            ''')
+            conn.commit()
+
             cursor.execute("SELECT id, recipient, subject, message_id FROM campaigns WHERE status = 'PENDING'")
             pending = cursor.fetchall()
             conn.close()
@@ -168,9 +207,13 @@ with tab2:
                     try:
                         sender.send_smtp_message(s_email, s_pass, recipient, subj, body_day2, reply_to_id=initial_msg_id, sender_header=from_header)
                         db.mark_followup_complete(cid)
+                        st.success(f"✅ Sent: {recipient}")
                     except TypeError:
                         sender.send_smtp_message(s_email, s_pass, recipient, subj, body_day2, reply_to_id=initial_msg_id)
                         db.mark_followup_complete(cid)
+                        st.success(f"✅ Sent: {recipient}")
+                    except Exception as e:
+                        st.error(f"❌ Error: {recipient} -> {e}")
                     
                     p_bar.progress((idx + 1) / len(pending))
                     if idx < len(pending) - 1:
