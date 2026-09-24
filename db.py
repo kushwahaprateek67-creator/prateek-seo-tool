@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-DB_NAME = "data_v2.db"
+DB_NAME = "data_v3.db"  # Naya table version clean schema ke liye
 
 def get_ist_now():
     ist_offset = timezone(timedelta(hours=5, minutes=30))
@@ -15,6 +15,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             recipient TEXT,
             subject TEXT,
+            body TEXT,
             sent_at TEXT,
             followup_due TEXT,
             status TEXT,
@@ -24,23 +25,23 @@ def init_db():
     conn.commit()
     conn.close()
 
-def log_initial_email(recipient, subject, message_id="", due_time_or_hours=24):
+def log_initial_email(recipient, subject, body, message_id="", due_time_or_hours=24):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     now_ist = get_ist_now()
     
-    # Handle if due_time is already a string timestamp or an integer/float hour
     if isinstance(due_time_or_hours, (int, float)):
         due_val = (now_ist + timedelta(hours=due_time_or_hours)).strftime("%Y-%m-%d %H:%M:%S")
     else:
         due_val = str(due_time_or_hours)
     
     cursor.execute('''
-        INSERT INTO campaigns (recipient, subject, sent_at, followup_due, status, message_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO campaigns (recipient, subject, body, sent_at, followup_due, status, message_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (
         recipient,
         subject,
+        body,
         now_ist.strftime("%Y-%m-%d %H:%M:%S"),
         due_val,
         'PENDING',
