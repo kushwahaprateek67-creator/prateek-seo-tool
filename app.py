@@ -40,23 +40,23 @@ if not st.session_state.authenticated:
 db.init_db()
 
 st.markdown("# ⚡ Bulk Email Outreach Tool")
-st.caption("Active Status: Online | Delay: 4 Seconds | Manual Follow-up Mode")
+st.caption("Active Status: Online | Delay: 4s | Quoted Thread Reply Mode")
 
 tab1, tab2 = st.tabs(["🚀 Send Bulk Emails (Day 1)", "📊 Follow-up Tracker (Day 2)"])
 
 with tab1:
     st.markdown("### 1. Sender Details")
     c1, c2, c3 = st.columns(3)
-    with c1: sender_name = st.text_input("Sender Name (Aapka Naam)")
-    with c2: s_email = st.text_input("Apna Gmail ID")
+    with c1: sender_name = st.text_input("Sender Name", placeholder="Lisa")
+    with c2: s_email = st.text_input("Apna Gmail ID", placeholder="lisa@gmail.com")
     with c3: s_pass = st.text_input("16-Digit App Password", type="password")
 
-    email_list_input = st.text_area("Jinhe email bhejna hai (Ek line mein ek email):", height=150)
+    email_list_input = st.text_area("Jinhe email bhejna hai (Ek line mein ek email):", height=140)
     subject = st.text_input("Email Subject", value="Quick Inquiry")
     
     c4, c5 = st.columns(2)
     with c4: body_day1 = st.text_area("Pehla Email Content", height=150)
-    with c5: body_day2 = st.text_area("Follow-up Content", height=150)
+    with c5: body_day2 = st.text_area("Follow-up Content (Sirf naya message)", height=150, value="Hi,\n\nI wanted to follow up again — please share your feedback.\n\nThanks,\nLisa")
 
     if st.button("🚀 Send First Email >>", type="primary"):
         if not s_email or not s_pass or not email_list_input.strip():
@@ -68,30 +68,28 @@ with tab1:
             if not valid_emails:
                 st.error("❌ Koi valid email nahi mila.")
             else:
-                st.info(f"✅ Total {len(valid_emails)} emails ja rahe hain...")
+                st.info(f"✅ Total {len(valid_emails)} emails bheje ja rahe hain...")
                 p_bar = st.progress(0)
                 from_header = f"{sender_name} <{s_email}>" if sender_name.strip() else s_email
 
                 for i, recipient in enumerate(valid_emails):
                     try:
                         sender.send_day1_email(s_email, s_pass, recipient, subject, body_day1, delay_hours=24, sender_header=from_header)
-                    except TypeError:
-                        sender.send_day1_email(s_email, s_pass, recipient, subject, body_day1, delay_hours=24)
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"Error {recipient}: {e}")
                     
                     p_bar.progress((i + 1) / len(valid_emails))
                     if i < len(valid_emails) - 1:
                         time.sleep(4)
                 
-                st.success("🎉 Sabhi emails bheje gaye! Ab Tab 2 mein check karein.")
+                st.success("🎉 Pehla email successfully chala gaya!")
 
 with tab2:
     st.markdown("### 📊 Email History aur Follow-up Status")
     
     try:
         records = db.get_all_records()
-    except:
+    except Exception:
         records = []
 
     if records:
@@ -102,34 +100,43 @@ with tab2:
 
     st.markdown("---")
     
-    if st.button("⚡ Bhejo Pending Follow-ups (Jab Chaho Tab) >>", type="primary"):
+    if st.button("⚡ Bhejo Quoted Follow-up (Thread Reply) >>", type="primary"):
         if not s_email or not s_pass:
             st.error("❌ Pehle Tab 1 mein apna Gmail aur Password dalein!")
         else:
             conn = sqlite3.connect(db.DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("SELECT id, recipient, subject, message_id FROM campaigns WHERE status = 'PENDING'")
+            cursor.execute("SELECT id, recipient, subject, message_id, body, sent_at FROM campaigns WHERE status = 'PENDING'")
             pending = cursor.fetchall()
             conn.close()
 
             if not pending:
                 st.warning("⚠️ Koi pending email nahi bacha hai!")
             else:
-                st.info(f"🚀 {len(pending)} emails ko follow-up bheja ja raha hai...")
+                st.info(f"🚀 {len(pending)} emails ko quoted thread follow-up bheja ja raha hai...")
                 p_bar2 = st.progress(0)
                 from_header = f"{sender_name} <{s_email}>" if sender_name.strip() else s_email
                 
                 for idx, row in enumerate(pending):
-                    cid, recipient, subj, initial_msg_id = row
+                    cid, recipient, subj, initial_msg_id, original_body, sent_at = row
                     try:
-                        sender.send_smtp_message(s_email, s_pass, recipient, subj, body_day2, reply_to_id=initial_msg_id, sender_header=from_header)
+                        sender.send_smtp_message(
+                            s_email=s_email,
+                            s_pass=s_pass,
+                            recipient=recipient,
+                            subject=subj,
+                            followup_body=body_day2,
+                            original_body=original_body,
+                            sent_at=sent_at,
+                            reply_to_id=initial_msg_id,
+                            sender_header=from_header
+                        )
                         db.mark_followup_complete(cid)
-                    except TypeError:
-                        sender.send_smtp_message(s_email, s_pass, recipient, subj, body_day2, reply_to_id=initial_msg_id)
-                        db.mark_followup_complete(cid)
+                    except Exception as e:
+                        st.error(f"Error {recipient}: {e}")
                     
                     p_bar2.progress((idx + 1) / len(pending))
                     if idx < len(pending) - 1:
                         time.sleep(4)
                 
-                st.success("🎉 Sabhi follow-ups successfully chale gaye!")
+                st.success("🎉 Sabhi quoted follow-up emails successfully chale gaye!")
