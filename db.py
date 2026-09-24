@@ -1,12 +1,12 @@
 import sqlite3
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime, timedelta, timezone
 
-DB_NAME = "data_v2.db" # Naya naam, taaki purana error na aaye
+DB_NAME = "data_v2.db"
 
 def get_ist_now():
-    ist = pytz.timezone('Asia/Kolkata')
-    return datetime.now(ist)
+    # Indian Standard Time (UTC + 5:30) bina kisi external package ke
+    ist_offset = timezone(timedelta(hours=5, minutes=30))
+    return datetime.now(ist_offset)
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
