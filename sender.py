@@ -21,8 +21,7 @@ def send_day1_email(s_email, s_pass, recipient, subject, body, delay_hours=24, s
     server.sendmail(s_email, recipient, msg.as_string())
     server.quit()
     
-    # Body bhi log kar rahe hain taaki follow-up mein quote kar sakein
-    db.log_initial_email(recipient, subject, body, message_id=msg_id, due_time_or_hours=delay_hours)
+    db.log_initial_email(s_email, recipient, subject, body, message_id=msg_id, due_time_or_hours=delay_hours)
 
 def send_smtp_message(s_email, s_pass, recipient, subject, followup_body, original_body="", sent_at="", reply_to_id=None, sender_header=None):
     msg = MIMEMultipart()
@@ -37,7 +36,6 @@ def send_smtp_message(s_email, s_pass, recipient, subject, followup_body, origin
         msg['In-Reply-To'] = reply_to_id
         msg['References'] = reply_to_id
         
-    # Standard email reply quoted format create karein
     if original_body:
         full_email_content = (
             f"{followup_body}\n\n"
