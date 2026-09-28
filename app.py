@@ -36,8 +36,8 @@ if not st.session_state.authenticated:
     st.button("Login >>", on_click=check_password)
     st.stop()
 
-st.markdown("# ⚡ Bulk Auto Engine (100% Bulletproof)")
-st.caption("Upload same files on Day 1 and Day 2. Headers na bhi hon toh chalega!")
+st.markdown("# ⚡ Bulk Auto Engine (Resume & Stateless)")
+st.caption("Upload same files on Day 1 and Day 2. Connection safe with Skip feature!")
 
 def load_data(file):
     if file.name.endswith('.csv'):
@@ -57,8 +57,12 @@ with col2:
 
 tab1, tab2 = st.tabs(["🚀 Day 1: Send New Emails", "⚡ Day 2: Send Quoted Follow-ups"])
 
+# ================= TAB 1 : DAY 1 SENDING =================
 with tab1:
     body_day1 = st.text_area("Day 1 Email Content", height=150, key="b1")
+    
+    st.markdown("---")
+    skip_targets_d1 = st.number_input("Kitne Day 1 emails ja chuke the? (Pehli baar hai toh 0)", min_value=0, value=0, step=1, key="skip_d1")
     
     if st.button("🚀 Start Day 1 Sending >>", type="primary"):
         if not senders_file or not targets_file or not body_day1:
@@ -68,7 +72,7 @@ with tab1:
             df_targets = load_data(targets_file)
             
             if len(df_senders.columns) < 2:
-                st.error("❌ Senders file me kam se kam 2 columns (Email aur Password) hone zaroori hain!")
+                st.error("❌ Senders file me kam se kam 2 columns hone zaroori hain!")
             else:
                 s_emails = df_senders.iloc[:, 0].astype(str).tolist()
                 s_passes = df_senders.iloc[:, 1].astype(str).tolist()
@@ -77,7 +81,7 @@ with tab1:
                 targets_list = [str(t).strip() for t in df_targets.iloc[:, 0].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', str(t).strip())]
                 
                 if not senders_list or not targets_list:
-                    st.error("❌ Files me valid Emails nahi mile. Format check karein.")
+                    st.error("❌ Files me valid Emails nahi mile.")
                 else:
                     chunk_size = math.ceil(len(targets_list) / len(senders_list))
                     st.success(f"✅ Total {len(senders_list)} Senders aur {len(targets_list)} Targets. Har Sender {chunk_size} email bhejega.")
@@ -86,6 +90,8 @@ with tab1:
                     status = st.empty()
                     
                     sent_counter = 0
+                    global_target_idx = 0
+                    
                     for i, s_data in enumerate(senders_list):
                         s_email = s_data['Email']
                         s_pass = s_data['Password']
@@ -94,25 +100,34 @@ with tab1:
                         my_targets = targets_list[start_idx : start_idx + chunk_size]
                         
                         for target in my_targets:
-                            status.text(f"⏳ Sending... {s_email} -> {target}")
+                            if global_target_idx < skip_targets_d1:
+                                global_target_idx += 1
+                                p_bar.progress(min(global_target_idx / len(targets_list), 1.0))
+                                continue
+                                
+                            status.text(f"⏳ Sending... {global_target_idx + 1}/{len(targets_list)} | {s_email} -> {target}")
                             success, err = sender.send_email_direct(s_email, s_pass, target, subject_input, body_day1, global_sender_name)
                             
                             if not success:
                                 st.error(f"Error {s_email} to {target}: {err}")
                             
                             sent_counter += 1
-                            p_bar.progress(min(sent_counter / len(targets_list), 1.0))
+                            global_target_idx += 1
+                            p_bar.progress(min(global_target_idx / len(targets_list), 1.0))
                             time.sleep(5) 
                     
-                    # Yeh line loop khatam hone ke baad hi chalegi
-                    if sent_counter > 0:
+                    if sent_counter > 0 or skip_targets_d1 > 0:
                         status.success("🎉 Day 1 Sending Complete!")
 
+# ================= TAB 2 : DAY 2 FOLLOW-UPS =================
 with tab2:
     st.warning("⚠️ Day 2 me wahi files upload karein jo Day 1 me ki thi.")
     
     body_day2_new = st.text_area("Naya Follow-up Message", value="Hi,\n\nJust following up on my previous email.", height=100)
     body_day2_old = st.text_area("Purana Message (Neeche Quote karne ke liye)", placeholder="Day 1 ka content yahan daalein...", height=100)
+    
+    st.markdown("---")
+    skip_targets_d2 = st.number_input("Kitne Day 2 follow-ups ja chuke the? (Pehli baar hai toh 0)", min_value=0, value=0, step=1, key="skip_d2")
     
     if st.button("⚡ Start Quoted Follow-ups >>", type="primary"):
         if not senders_file or not targets_file or not body_day2_old:
@@ -122,7 +137,7 @@ with tab2:
             df_targets = load_data(targets_file)
             
             if len(df_senders.columns) < 2:
-                st.error("❌ Senders file me kam se kam 2 columns (Email aur Password) hone zaroori hain!")
+                st.error("❌ Senders file me kam se kam 2 columns hone zaroori hain!")
             else:
                 s_emails = df_senders.iloc[:, 0].astype(str).tolist()
                 s_passes = df_senders.iloc[:, 1].astype(str).tolist()
@@ -131,7 +146,7 @@ with tab2:
                 targets_list = [str(t).strip() for t in df_targets.iloc[:, 0].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', str(t).strip())]
                 
                 if not senders_list or not targets_list:
-                    st.error("❌ Files me valid Emails nahi mile. Format check karein.")
+                    st.error("❌ Files me valid Emails nahi mile.")
                 else:
                     chunk_size = math.ceil(len(targets_list) / len(senders_list))
                     
@@ -139,6 +154,8 @@ with tab2:
                     status2 = st.empty()
                     
                     sent_counter2 = 0
+                    global_target_idx2 = 0
+                    
                     for i, s_data in enumerate(senders_list):
                         s_email = s_data['Email']
                         s_pass = s_data['Password']
@@ -147,6 +164,11 @@ with tab2:
                         my_targets = targets_list[start_idx : start_idx + chunk_size]
                         
                         for target in my_targets:
+                            if global_target_idx2 < skip_targets_d2:
+                                global_target_idx2 += 1
+                                p_bar2.progress(min(global_target_idx2 / len(targets_list), 1.0))
+                                continue
+                                
                             followup_subj = subject_input if subject_input.lower().startswith("re:") else f"Re: {subject_input}"
                             
                             full_followup_body = (
@@ -158,15 +180,16 @@ with tab2:
                                 f"{body_day2_old}"
                             )
                             
-                            status2.text(f"⏳ Follow-up... {s_email} -> {target}")
+                            status2.text(f"⏳ Follow-up... {global_target_idx2 + 1}/{len(targets_list)} | {s_email} -> {target}")
                             success, err = sender.send_email_direct(s_email, s_pass, target, followup_subj, full_followup_body, global_sender_name)
                             
                             if not success:
                                 st.error(f"Error {s_email} to {target}: {err}")
                             
                             sent_counter2 += 1
-                            p_bar2.progress(min(sent_counter2 / len(targets_list), 1.0))
+                            global_target_idx2 += 1
+                            p_bar2.progress(min(global_target_idx2 / len(targets_list), 1.0))
                             time.sleep(5)
                     
-                    if sent_counter2 > 0:
+                    if sent_counter2 > 0 or skip_targets_d2 > 0:
                         status2.success("🎉 Sabhi Follow-ups Done! Threading automatically ho jayegi.")
