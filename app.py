@@ -7,7 +7,7 @@ import re
 
 st.set_page_config(page_title="Bulk Auto Engine", layout="wide")
 
-# ================= HACKER DARK THEME =================
+# ================= DARK THEME =================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
@@ -36,21 +36,29 @@ if not st.session_state.authenticated:
     st.button("Login >>", on_click=check_password)
     st.stop()
 
-st.markdown("# ⚡ Bulk Auto Engine (No DB / Stateless)")
+st.markdown("# ⚡ Bulk Auto Engine (Excel & CSV Support)")
 st.caption("Upload same files on Day 1 and Day 2. Tool will auto-match Senders to Targets.")
 
-# Global Inputs (Dono din kaam aayenge)
+# Helper function file padhne ke liye
+def load_data(file):
+    if file.name.endswith('.csv'):
+        return pd.read_csv(file)
+    else:
+        return pd.read_excel(file)
+
+# Global Inputs 
 global_sender_name = st.text_input("Sender Name (Sabhi emails is naam se jayenge)", placeholder="Prateek Kushwaha")
 subject_input = st.text_input("Email Subject", value="Quick Inquiry")
 
-st.markdown("### 📥 Upload Lists (CSV)")
-st.info("Senders CSV me sirf 2 column: 'Email', 'Password'. Targets CSV me 1 column: 'Target_Email'.")
+st.markdown("### 📥 Upload Lists (.xlsx ya .csv)")
+st.info("Senders File me 2 column: 'Email', 'Password'. Targets File me 1 column: 'Target_Email'.")
 
 col1, col2 = st.columns(2)
 with col1:
-    senders_csv = st.file_uploader("1. Senders CSV (e.g. 100 Gmails)", type=['csv'])
+    # Yahan 'csv' ke sath 'xlsx' bhi add kar diya
+    senders_file = st.file_uploader("1. Senders File (e.g. 100 Gmails)", type=['csv', 'xlsx'])
 with col2:
-    targets_csv = st.file_uploader("2. Targets CSV (e.g. 2500 Targets)", type=['csv'])
+    targets_file = st.file_uploader("2. Targets File (e.g. 2500 Targets)", type=['csv', 'xlsx'])
 
 tab1, tab2 = st.tabs(["🚀 Day 1: Send New Emails", "⚡ Day 2: Send Quoted Follow-ups"])
 
@@ -59,14 +67,14 @@ with tab1:
     body_day1 = st.text_area("Day 1 Email Content", height=150, key="b1")
     
     if st.button("🚀 Start Day 1 Sending >>", type="primary"):
-        if not senders_csv or not targets_csv or not body_day1:
-            st.error("❌ CSV files upload karein aur Content likhein!")
+        if not senders_file or not targets_file or not body_day1:
+            st.error("❌ Files upload karein aur Content likhein!")
         else:
-            df_senders = pd.read_csv(senders_csv)
-            df_targets = pd.read_csv(targets_csv)
+            df_senders = load_data(senders_file)
+            df_targets = load_data(targets_file)
             
             senders_list = df_senders.to_dict('records')
-            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
             
             chunk_size = math.ceil(len(targets_list) / len(senders_list))
             st.success(f"✅ Total {len(senders_list)} Senders aur {len(targets_list)} Targets. Har Sender {chunk_size} email bhejega.")
@@ -90,27 +98,26 @@ with tab1:
                     
                     sent_counter += 1
                     p_bar.progress(min(sent_counter / len(targets_list), 1.0))
-                    time.sleep(5) # 5 seconds gap
+                    time.sleep(5) 
             
             status.success("🎉 Day 1 Sending Complete!")
 
 # ================= TAB 2 : DAY 2 FOLLOW-UPS =================
 with tab2:
-    st.warning("⚠️ Day 2 me wahi CSV files upload karein jo Day 1 me ki thi. Tool automatically wahi setting banayega.")
+    st.warning("⚠️ Day 2 me wahi files upload karein jo Day 1 me ki thi.")
     
     body_day2_new = st.text_area("Naya Follow-up Message", value="Hi,\n\nJust following up on my previous email.", height=100)
     body_day2_old = st.text_area("Purana Message (Neeche Quote karne ke liye)", placeholder="Day 1 ka content yahan daalein...", height=100)
     
     if st.button("⚡ Start Quoted Follow-ups >>", type="primary"):
-        if not senders_csv or not targets_csv or not body_day2_old:
-            st.error("❌ CSV files upload karein aur purana message dalein!")
+        if not senders_file or not targets_file or not body_day2_old:
+            st.error("❌ Files upload karein aur purana message dalein!")
         else:
-            # Same math logic as Day 1
-            df_senders = pd.read_csv(senders_csv)
-            df_targets = pd.read_csv(targets_csv)
+            df_senders = load_data(senders_file)
+            df_targets = load_data(targets_file)
             
             senders_list = df_senders.to_dict('records')
-            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
             
             chunk_size = math.ceil(len(targets_list) / len(senders_list))
             
@@ -126,10 +133,8 @@ with tab2:
                 my_targets = targets_list[start_idx : start_idx + chunk_size]
                 
                 for target in my_targets:
-                    # Gmail automatically threads emails if Subject starts with 'Re: ' and matches the original
                     followup_subj = subject_input if subject_input.lower().startswith("re:") else f"Re: {subject_input}"
                     
-                    # Create quoted body
                     full_followup_body = (
                         f"{body_day2_new}\n\n"
                         f"--------------------------------------------------\n"
