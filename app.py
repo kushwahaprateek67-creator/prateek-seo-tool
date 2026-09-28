@@ -39,30 +39,24 @@ if not st.session_state.authenticated:
 st.markdown("# ⚡ Bulk Auto Engine (Excel & CSV Support)")
 st.caption("Upload same files on Day 1 and Day 2. Tool will auto-match Senders to Targets.")
 
-# Helper function file padhne ke liye
 def load_data(file):
     if file.name.endswith('.csv'):
         return pd.read_csv(file)
     else:
         return pd.read_excel(file)
 
-# Global Inputs 
 global_sender_name = st.text_input("Sender Name (Sabhi emails is naam se jayenge)", placeholder="Prateek Kushwaha")
 subject_input = st.text_input("Email Subject", value="Quick Inquiry")
 
 st.markdown("### 📥 Upload Lists (.xlsx ya .csv)")
-st.info("Senders File me 2 column: 'Email', 'Password'. Targets File me 1 column: 'Target_Email'.")
-
 col1, col2 = st.columns(2)
 with col1:
-    # Yahan 'csv' ke sath 'xlsx' bhi add kar diya
-    senders_file = st.file_uploader("1. Senders File (e.g. 100 Gmails)", type=['csv', 'xlsx'])
+    senders_file = st.file_uploader("1. Senders File (Email, Password columns)", type=['csv', 'xlsx'])
 with col2:
-    targets_file = st.file_uploader("2. Targets File (e.g. 2500 Targets)", type=['csv', 'xlsx'])
+    targets_file = st.file_uploader("2. Targets File (Sirf 1 column chahiye)", type=['csv', 'xlsx'])
 
 tab1, tab2 = st.tabs(["🚀 Day 1: Send New Emails", "⚡ Day 2: Send Quoted Follow-ups"])
 
-# ================= TAB 1 : DAY 1 SENDING =================
 with tab1:
     body_day1 = st.text_area("Day 1 Email Content", height=150, key="b1")
     
@@ -73,8 +67,13 @@ with tab1:
             df_senders = load_data(senders_file)
             df_targets = load_data(targets_file)
             
+            # Galti se heading mein space aa gaya ho toh use hatane ke liye
+            df_senders.columns = df_senders.columns.str.strip()
+            
             senders_list = df_senders.to_dict('records')
-            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            
+            # YAHAN HAI MAGIC: Ab heading ka naam kuch bhi ho, tool pehla column uthayega (iloc[:, 0])
+            targets_list = [t.strip() for t in df_targets.iloc[:, 0].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
             
             chunk_size = math.ceil(len(targets_list) / len(senders_list))
             st.success(f"✅ Total {len(senders_list)} Senders aur {len(targets_list)} Targets. Har Sender {chunk_size} email bhejega.")
@@ -84,9 +83,12 @@ with tab1:
             
             sent_counter = 0
             for i, s_data in enumerate(senders_list):
-                s_email = str(s_data['Email']).strip()
-                s_pass = str(s_data['Password']).strip()
+                s_email = str(s_data.get('Email', '')).strip()
+                s_pass = str(s_data.get('Password', '')).strip()
                 
+                if not s_email or not s_pass:
+                    continue
+                    
                 start_idx = i * chunk_size
                 my_targets = targets_list[start_idx : start_idx + chunk_size]
                 
@@ -102,7 +104,6 @@ with tab1:
             
             status.success("🎉 Day 1 Sending Complete!")
 
-# ================= TAB 2 : DAY 2 FOLLOW-UPS =================
 with tab2:
     st.warning("⚠️ Day 2 me wahi files upload karein jo Day 1 me ki thi.")
     
@@ -116,8 +117,11 @@ with tab2:
             df_senders = load_data(senders_file)
             df_targets = load_data(targets_file)
             
+            df_senders.columns = df_senders.columns.str.strip()
             senders_list = df_senders.to_dict('records')
-            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            
+            # YAHAN BHI MAGIC: Pehla column automatically uthayega
+            targets_list = [t.strip() for t in df_targets.iloc[:, 0].dropna().tolist() if isinstance(t, str) and re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
             
             chunk_size = math.ceil(len(targets_list) / len(senders_list))
             
@@ -126,8 +130,11 @@ with tab2:
             
             sent_counter2 = 0
             for i, s_data in enumerate(senders_list):
-                s_email = str(s_data['Email']).strip()
-                s_pass = str(s_data['Password']).strip()
+                s_email = str(s_data.get('Email', '')).strip()
+                s_pass = str(s_data.get('Password', '')).strip()
+                
+                if not s_email or not s_pass:
+                    continue
                 
                 start_idx = i * chunk_size
                 my_targets = targets_list[start_idx : start_idx + chunk_size]
