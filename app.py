@@ -5,6 +5,7 @@ import sender
 import time
 import re
 import sqlite3
+import os
 
 st.set_page_config(page_title="Bulk Email Tool", layout="wide", initial_sidebar_state="collapsed")
 
@@ -40,9 +41,9 @@ if not st.session_state.authenticated:
 db.init_db()
 
 st.markdown("# ⚡ Bulk Email Outreach Tool")
-st.caption("Active Status: Online | Delay: 4s | Quoted Thread Reply Mode")
+st.caption("Active Status: Online | Quoted Thread Reply | Data Backup Mode")
 
-tab1, tab2 = st.tabs(["🚀 Send Bulk Emails (Day 1)", "📊 Follow-up Tracker (Day 2)"])
+tab1, tab2 = st.tabs(["🚀 Send Bulk Emails (Day 1)", "📊 Follow-up & Backup (Day 2)"])
 
 with tab1:
     st.markdown("### 1. Sender Details")
@@ -82,10 +83,37 @@ with tab1:
                     if i < len(valid_emails) - 1:
                         time.sleep(4)
                 
-                st.success("🎉 Pehla email successfully chala gaya!")
+                st.success("🎉 Pehla email successfully chala gaya! Ab Tab 2 mein jaakar Backup Download kar lein.")
 
 with tab2:
-    st.markdown("### 📊 Email History aur Follow-up Status")
+    st.markdown("### 💾 1. Data Backup & Restore")
+    st.info("Streamlit roz raat ko server reset kar deta hai. Isliye 'Day 1' ka kaam khatam hone par Backup zarur Download karein.")
+    
+    colA, colB = st.columns(2)
+    
+    with colA:
+        if os.path.exists(db.DB_NAME):
+            with open(db.DB_NAME, "rb") as f:
+                st.download_button(
+                    label="📥 Aaj ka Data SAVE Karein (Download Backup)",
+                    data=f,
+                    file_name="email_backup.db",
+                    mime="application/octet-stream",
+                    help="Email bhejne ke baad ise download kar lein."
+                )
+        else:
+            st.warning("Abhi tak koi data nahi bana hai.")
+
+    with colB:
+        uploaded_file = st.file_uploader("📤 Kal ka Data WAPAS Layein (Upload Backup)", type=["db"])
+        if uploaded_file is not None:
+            if st.button("🔄 Restore Data Now"):
+                with open(db.DB_NAME, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                st.success("✅ Data wapas aa gaya! Kripya page ko ek baar REFRESH kar lein.")
+
+    st.markdown("---")
+    st.markdown("### 📊 2. Email History aur Follow-up Status")
     
     try:
         records = db.get_all_records()
@@ -96,7 +124,7 @@ with tab2:
         df_records = pd.DataFrame(records, columns=["ID", "Receiver Email", "Subject", "Sent Time", "Follow-up Due Time", "Status"])
         st.dataframe(df_records, use_container_width=True)
     else:
-        st.info("Abhi tak koi email record nahi hai.")
+        st.warning("Abhi tak koi email record nahi hai. (Agar kal ka data chahiye, toh upar se Backup Upload karein)")
 
     st.markdown("---")
     
