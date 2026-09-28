@@ -1,21 +1,21 @@
 import streamlit as st
 import pandas as pd
 import math
-import db
 import sender
 import time
 import re
-import sqlite3
-import os
 
-st.set_page_config(page_title="Bulk Auto Outreach", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Bulk Auto Engine", layout="wide")
 
-# ================= DARK THEME =================
+# ================= HACKER DARK THEME =================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Fira Code', monospace !important; background-color: #07090e !important; color: #00ff66 !important; }
 .stApp { background: radial-gradient(circle at 50% 0%, #0d1912 0%, #050807 100%) !important; }
+.stTextInput > div > div > input, .stTextArea > div > div > textarea { background-color: #0b110e !important; color: #00ffaa !important; border: 1px solid #00ff66 !important; }
+.stButton > button { background-color: #0d2015 !important; color: #00ff66 !important; border: 1px solid #00ff66 !important; font-weight: 700 !important; }
+.stButton > button:hover { background-color: #00ff66 !important; color: #050807 !important; box-shadow: 0 0 20px rgba(0, 255, 102, 0.8) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,151 +36,116 @@ if not st.session_state.authenticated:
     st.button("Login >>", on_click=check_password)
     st.stop()
 
-db.init_db()
+st.markdown("# ⚡ Bulk Auto Engine (No DB / Stateless)")
+st.caption("Upload same files on Day 1 and Day 2. Tool will auto-match Senders to Targets.")
 
-st.markdown("# ⚡ Bulk Auto Engine (100 Accounts -> 2500 Emails)")
-st.caption("Auto-Rotation | Resumable | Quoted Threads")
+# Global Inputs (Dono din kaam aayenge)
+global_sender_name = st.text_input("Sender Name (Sabhi emails is naam se jayenge)", placeholder="Prateek Kushwaha")
+subject_input = st.text_input("Email Subject", value="Quick Inquiry")
 
-tab1, tab2 = st.tabs(["🚀 Auto Day 1 (Send Bulk)", "📊 Auto Day 2 (Follow-ups & Backup)"])
+st.markdown("### 📥 Upload Lists (CSV)")
+st.info("Senders CSV me sirf 2 column: 'Email', 'Password'. Targets CSV me 1 column: 'Target_Email'.")
+
+col1, col2 = st.columns(2)
+with col1:
+    senders_csv = st.file_uploader("1. Senders CSV (e.g. 100 Gmails)", type=['csv'])
+with col2:
+    targets_csv = st.file_uploader("2. Targets CSV (e.g. 2500 Targets)", type=['csv'])
+
+tab1, tab2 = st.tabs(["🚀 Day 1: Send New Emails", "⚡ Day 2: Send Quoted Follow-ups"])
 
 # ================= TAB 1 : DAY 1 SENDING =================
 with tab1:
-    st.markdown("### 1. Upload CSV Files")
-    st.info("💡 Senders CSV me 3 column hone chahiye: 'Email', 'Password', 'Name'. Targets CSV me 1 column: 'Target_Email'.")
+    body_day1 = st.text_area("Day 1 Email Content", height=150, key="b1")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        senders_csv = st.file_uploader("📥 Upload Senders CSV (100 Accounts)", type=['csv'], key="s1")
-    with col2:
-        targets_csv = st.file_uploader("📥 Upload Targets CSV (2500 Leads)", type=['csv'], key="t1")
-
-    subject = st.text_input("Email Subject", value="Quick Inquiry")
-    body_day1 = st.text_area("Pehla Email Content", height=150)
-
-    if st.button("🚀 Start Bulk Sending (Auto-Rotate) >>", type="primary"):
-        if not senders_csv or not targets_csv:
-            st.error("❌ Dono CSV files upload karna zaroori hai!")
+    if st.button("🚀 Start Day 1 Sending >>", type="primary"):
+        if not senders_csv or not targets_csv or not body_day1:
+            st.error("❌ CSV files upload karein aur Content likhein!")
         else:
             df_senders = pd.read_csv(senders_csv)
             df_targets = pd.read_csv(targets_csv)
             
             senders_list = df_senders.to_dict('records')
-            targets_list = df_targets['Target_Email'].dropna().tolist()
+            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
             
-            # Clean emails
-            targets_list = [t.strip() for t in targets_list if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            chunk_size = math.ceil(len(targets_list) / len(senders_list))
+            st.success(f"✅ Total {len(senders_list)} Senders aur {len(targets_list)} Targets. Har Sender {chunk_size} email bhejega.")
             
-            if not senders_list or not targets_list:
-                st.error("❌ CSV file khali hai ya galat format me hai.")
-            else:
-                total_senders = len(senders_list)
-                total_targets = len(targets_list)
-                chunk_size = math.ceil(total_targets / total_senders)
+            p_bar = st.progress(0)
+            status = st.empty()
+            
+            sent_counter = 0
+            for i, s_data in enumerate(senders_list):
+                s_email = str(s_data['Email']).strip()
+                s_pass = str(s_data['Password']).strip()
                 
-                st.success(f"✅ Loaded {total_senders} Senders aur {total_targets} Targets. Har account se lagbhag {chunk_size} email jayenge.")
+                start_idx = i * chunk_size
+                my_targets = targets_list[start_idx : start_idx + chunk_size]
                 
-                p_bar = st.progress(0)
-                status_text = st.empty()
-                
-                sent_count = 0
-                for index, s_data in enumerate(senders_list):
-                    s_email = s_data['Email'].strip()
-                    s_pass = str(s_data['Password']).strip()
-                    s_name = str(s_data.get('Name', '')).strip()
-                    from_header = f"{s_name} <{s_email}>" if s_name else s_email
+                for target in my_targets:
+                    status.text(f"⏳ Sending... {s_email} -> {target}")
+                    success, err = sender.send_email_direct(s_email, s_pass, target, subject_input, body_day1, global_sender_name)
+                    if not success:
+                        st.error(f"Error {s_email} to {target}: {err}")
                     
-                    # Us sender ka hissa (Chunk)
-                    start_idx = index * chunk_size
-                    end_idx = start_idx + chunk_size
-                    my_targets = targets_list[start_idx:end_idx]
-                    
-                    for target in my_targets:
-                        # Resume Check: Agar email pehle ja chuka hai toh skip karo
-                        if db.is_email_sent_day1(target):
-                            sent_count += 1
-                            continue
-                            
-                        status_text.text(f"⏳ Bhej rahe hain... Sender: {s_email} -> Target: {target}")
-                        try:
-                            sender.send_day1_email(s_email, s_pass, target, subject, body_day1, delay_hours=24, sender_header=from_header)
-                            sent_count += 1
-                        except Exception as e:
-                            st.error(f"Error {s_email} se {target} ko: {e}")
-                        
-                        p_bar.progress(min(sent_count / total_targets, 1.0))
-                        time.sleep(5) # 5 Second ka safe gap
-                
-                status_text.success("🎉 Pura Batch Complete Ho Gaya! Ab Tab 2 me jaakar Backup Download kar lijiye.")
+                    sent_counter += 1
+                    p_bar.progress(min(sent_counter / len(targets_list), 1.0))
+                    time.sleep(5) # 5 seconds gap
+            
+            status.success("🎉 Day 1 Sending Complete!")
 
 # ================= TAB 2 : DAY 2 FOLLOW-UPS =================
 with tab2:
-    st.markdown("### 💾 1. Database Backup & Restore")
-    c1, c2 = st.columns(2)
-    with c1:
-        if os.path.exists(db.DB_NAME):
-            with open(db.DB_NAME, "rb") as f:
-                st.download_button("📥 Download Backup (Aaj ka kaam save karein)", f, file_name="auto_email_backup.db", mime="application/octet-stream")
-    with c2:
-        uploaded_db = st.file_uploader("📤 Restore Backup (Kal ka data wapas layein)", type=["db"])
-        if uploaded_db:
-            if st.button("🔄 Restore Database"):
-                with open(db.DB_NAME, "wb") as f:
-                    f.write(uploaded_db.getvalue())
-                st.success("✅ Database Restore ho gaya! Page ko ek baar refresh karein.")
+    st.warning("⚠️ Day 2 me wahi CSV files upload karein jo Day 1 me ki thi. Tool automatically wahi setting banayega.")
     
-    st.markdown("---")
-    st.markdown("### ⚡ 2. Bulk Follow-up Engine")
-    st.info("Follow-up bhejne ke liye wahi Senders CSV dobara upload karein taaki tool ko Passwords mil sakein.")
+    body_day2_new = st.text_area("Naya Follow-up Message", value="Hi,\n\nJust following up on my previous email.", height=100)
+    body_day2_old = st.text_area("Purana Message (Neeche Quote karne ke liye)", placeholder="Day 1 ka content yahan daalein...", height=100)
     
-    senders_csv_followup = st.file_uploader("📥 Upload Senders CSV (Passwords ke liye)", type=['csv'], key="s2")
-    body_day2 = st.text_area("Follow-up Content", height=150, value="Hi,\n\nI wanted to follow up again — please share your feedback.\n\nThanks,")
-
-    if st.button("⚡ Start ALL Follow-ups >>", type="primary"):
-        if not senders_csv_followup:
-            st.error("❌ Pehle Senders CSV upload karein taaki password mil sakein!")
+    if st.button("⚡ Start Quoted Follow-ups >>", type="primary"):
+        if not senders_csv or not targets_csv or not body_day2_old:
+            st.error("❌ CSV files upload karein aur purana message dalein!")
         else:
-            df_senders2 = pd.read_csv(senders_csv_followup)
-            # Dictionary banalo {email: password}
-            pass_dict = {row['Email'].strip(): str(row['Password']).strip() for _, row in df_senders2.iterrows()}
-            name_dict = {row['Email'].strip(): str(row.get('Name', '')).strip() for _, row in df_senders2.iterrows()}
-
-            conn = sqlite3.connect(db.DB_NAME)
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, sender_email, recipient, subject, message_id, body, sent_at FROM campaigns WHERE status = 'PENDING'")
-            pending = cursor.fetchall()
-            conn.close()
-
-            if not pending:
-                st.warning("⚠️ Kisi ka follow-up pending nahi hai!")
-            else:
-                total_pending = len(pending)
-                st.info(f"🚀 Total {total_pending} logon ko follow-up bheja ja raha hai...")
-                p_bar2 = st.progress(0)
-                status_text2 = st.empty()
+            # Same math logic as Day 1
+            df_senders = pd.read_csv(senders_csv)
+            df_targets = pd.read_csv(targets_csv)
+            
+            senders_list = df_senders.to_dict('records')
+            targets_list = [t.strip() for t in df_targets['Target_Email'].dropna().tolist() if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', t.strip())]
+            
+            chunk_size = math.ceil(len(targets_list) / len(senders_list))
+            
+            p_bar2 = st.progress(0)
+            status2 = st.empty()
+            
+            sent_counter2 = 0
+            for i, s_data in enumerate(senders_list):
+                s_email = str(s_data['Email']).strip()
+                s_pass = str(s_data['Password']).strip()
                 
-                for idx, row in enumerate(pending):
-                    cid, s_email, recipient, subj, initial_msg_id, original_body, sent_at = row
-                    
-                    if s_email not in pass_dict:
-                        st.error(f"⚠️ {s_email} ka password CSV me nahi mila. Isko skip kar rahe hain.")
-                        continue
-                        
-                    s_pass = pass_dict[s_email]
-                    s_name = name_dict.get(s_email, '')
-                    from_header = f"{s_name} <{s_email}>" if s_name else s_email
-                    
-                    status_text2.text(f"⏳ Followup ja raha hai: {s_email} -> {recipient}")
-                    try:
-                        sender.send_smtp_message(
-                            s_email=s_email, s_pass=s_pass, recipient=recipient, subject=subj,
-                            followup_body=body_day2, original_body=original_body, sent_at=sent_at,
-                            reply_to_id=initial_msg_id, sender_header=from_header
-                        )
-                        db.mark_followup_complete(cid)
-                    except Exception as e:
-                        st.error(f"Error {recipient}: {e}")
-                    
-                    p_bar2.progress((idx + 1) / total_pending)
-                    time.sleep(5) # 5 Second Gap
+                start_idx = i * chunk_size
+                my_targets = targets_list[start_idx : start_idx + chunk_size]
                 
-                status_text2.success("🎉 Sabhi Follow-ups Done!")
+                for target in my_targets:
+                    # Gmail automatically threads emails if Subject starts with 'Re: ' and matches the original
+                    followup_subj = subject_input if subject_input.lower().startswith("re:") else f"Re: {subject_input}"
+                    
+                    # Create quoted body
+                    full_followup_body = (
+                        f"{body_day2_new}\n\n"
+                        f"--------------------------------------------------\n"
+                        f"From: {global_sender_name} <{s_email}>\n"
+                        f"To: {target}\n"
+                        f"Subject: {subject_input}\n\n"
+                        f"{body_day2_old}"
+                    )
+                    
+                    status2.text(f"⏳ Follow-up... {s_email} -> {target}")
+                    success, err = sender.send_email_direct(s_email, s_pass, target, followup_subj, full_followup_body, global_sender_name)
+                    if not success:
+                        st.error(f"Error {s_email} to {target}: {err}")
+                    
+                    sent_counter2 += 1
+                    p_bar2.progress(min(sent_counter2 / len(targets_list), 1.0))
+                    time.sleep(5)
+            
+            status2.success("🎉 Sabhi Follow-ups Done! Threading automatically ho jayegi.")
