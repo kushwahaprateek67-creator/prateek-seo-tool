@@ -19,7 +19,7 @@ html, body, [class*="css"] { font-family: 'Fira Code', monospace !important; bac
 </style>
 """, unsafe_allow_html=True)
 
-APP_PASSWORD = "Prateek@2026"
+APP_PASSWORD = "Prateek@2030"
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
